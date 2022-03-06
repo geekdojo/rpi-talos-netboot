@@ -31,6 +31,7 @@ dhcp-range=$tftpIp,proxy
 log-dhcp
 enable-tftp
 tftp-root=$tftpRoot
+pxe-service=0,"Raspberry Pi Boot"
 EOT
 
 # configure tftp boot dir
