@@ -4,6 +4,7 @@ piSerials=("fd6f8425" "9ffe8c84" "5712c92d" "106663d7" "3a671b4e" "70408f6c" "39
 
 tftpRoot="/tftp"
 tftpBaseline="$tftpRoot/baseline"
+tftpCmdlines="$tftpRoot/cmdlines"
 tftpIp=$(hostname -I | xargs)
 
 talosVersion="0.14.3"
@@ -56,7 +57,6 @@ cat <<EOT >> $tftpBaseline/config.txt
 arm_64bit=1
 arm_boost=1
 enable_uart=1
-uart_2ndstage=1
 enable_gic=1
 disable_commandline_tags=1
 disable_overscan=1
@@ -64,14 +64,23 @@ kernel=vmlinuz-arm64
 initramfs initramfs-arm64.xz followkernel
 EOT
 
-# create the talos specific cmdline.txt (i.e. kernel params)
-cat <<EOT >> $tftpBaseline/cmdline.txt
-talos.config=http://$tftpIp/ talos.platform=metal talos.board=rpi_4 panic=0
+# symlink a directory for each pi to the baseline
+rm -rf $tftpCmdlines
+mkdir $tftpCmdlines
+
+for i in ${piSerials[@]}; do
+
+    rm -rf $tftpRoot/${i}
+    mkdir $tftpRoot/${i}
+
+    cp -r $tftpBaseline/* $tftpRoot/${i}
+
+    # create the talos node specific cmdline.txt (i.e. kernel params)
+cat <<EOT >> $tftpCmdlines/$i.txt
+talos.config=http://$tftpIp/$i talos.platform=metal talos.board=rpi_4 panic=0 console=serial0,115200 init_on_alloc=1 slab_nomerge pti=on
 EOT
 
-# symlink a directory for each pi to the baseline
-for i in ${piSerials[@]}; do
-    ln -s $tftpBaseline $tftpRoot/${i}
+    ln -s $tftpCmdlines/$i.txt $tftpRoot/$i/cmdline.txt
 done
 
 # ---- TFTP BOOT END ----
