@@ -19,6 +19,18 @@ apt update && apt upgrade -y
 # install required apps
 apt install dnsmasq apache2 -y
 
+# determine number of controlplanes and workers
+numberOfNodes=${#piSerials[@]}
+numberOfControlPlanes=1
+untaintControlPlanes=false # used later to allow scheduling on the controlplanes for small clusters
+if [[ $numberOfNodes -gt 3 ]]
+then
+    ((numberOfControlPlanes=3))
+else
+    ((untaintControlPlanes=true))
+fi
+let z=numberOfControlPlanes-1 #zero based array
+
 # ---- TFTP BOOT BEGIN ----
 
 # configure dnsmasq
@@ -68,19 +80,25 @@ EOT
 rm -rf $tftpCmdlines
 mkdir $tftpCmdlines
 
-for i in ${piSerials[@]}; do
+for i in ${!piSerials[@]}; do
+ 
+    rm -rf $tftpRoot/${piSerials[$i]}
+    mkdir $tftpRoot/${piSerials[$i]}
+    cp -r $tftpBaseline/* $tftpRoot/${piSerials[$i]}
 
-    rm -rf $tftpRoot/${i}
-    mkdir $tftpRoot/${i}
+    configName='worker.yaml'
+    if [[ $i -le $z ]]
+    then
+        configName='controlplane.yaml'
+    fi
 
-    cp -r $tftpBaseline/* $tftpRoot/${i}
-
-    # create the talos node specific cmdline.txt (i.e. kernel params)
-cat <<EOT >> $tftpCmdlines/$i.txt
-talos.config=http://$tftpIp/$i talos.platform=metal talos.board=rpi_4 panic=0 console=serial0,115200 init_on_alloc=1 slab_nomerge pti=on
+# create the talos node specific cmdline.txt (i.e. kernel params)
+cat <<EOT >> $tftpCmdlines/${piSerials[$i]}.txt
+talos.config=http://$tftpIp/${piSerials[$i]}/$configName talos.platform=metal talos.board=rpi_4 panic=0 console=serial0,115200 init_on_alloc=1 slab_nomerge pti=on
 EOT
 
-    ln -s $tftpCmdlines/$i.txt $tftpRoot/$i/cmdline.txt
+    ln -s $tftpCmdlines/${piSerials[$i]}.txt $tftpRoot/${piSerials[$i]}/cmdline.txt
+
 done
 
 # ---- TFTP BOOT END ----
@@ -110,10 +128,10 @@ for i in ${talosConfigFiles[@]}; do
     sed -i 's|# sysctls:|sysctls:|g' $i
     sed -i 's|#     net.ipv4.ip_forward: "0"|    net.ipv4.ip_forward: "1"|g' $i
 
+    sed -i 's|network: {}|network:|g' $i
     sed -i 's|# interfaces:|  interfaces:|g' $i
     sed -i 's|#     - interface: eth0|    - interface: eth0|g' $i
     sed -i 's|#       # dhcp: true|      dhcp: true|g' $i
-
     if [[ $i == "${talosBaselineDir}/controlplane.yaml" ]]
     then
         #controlplane so let's add the VIP
@@ -122,19 +140,7 @@ for i in ${talosConfigFiles[@]}; do
     fi
 done
 
-# determine number of controlplanes and workers
-numberOfNodes=${#piSerials[@]}
-numberOfControlPlanes=1
-untaintControlPlanes=false # used later to allow scheduling on the controlplanes for small clusters
-if [[ $numberOfNodes -gt 3 ]]
-then
-    ((numberOfControlPlanes=3))
-else
-    ((untaintControlPlanes=true))
-fi
-
 # now loop through all the PIs and create a directory for each in apache
-let z=numberOfControlPlanes-1 #zero based array
 for i in ${!piSerials[@]}; do
     newDir="${apacheRoot}/${piSerials[$i]}"
 
@@ -144,15 +150,7 @@ for i in ${!piSerials[@]}; do
     if [[ $i -le $z ]]
     then
         #controlplane node
-        if [[ $i == 0 ]]
-        then
-            # make first one init node
-            cp "${talosBaselineDir}/controlplane.yaml" "${newDir}/controlplane.yaml"
-            sed -i 's|type: controlplane|type: init|g' "${newDir}/controlplane.yaml"
-            echo "WARNING WARNING: After bootstrap occurs you MUST change the type on ${newDir}/controlplane.yaml to 'controlplane' (from init) or risk a split head situation."
-        else
-            ln -s "${talosBaselineDir}/controlplane.yaml" "${newDir}/controlplane.yaml"
-        fi
+        ln -s "${talosBaselineDir}/controlplane.yaml" "${newDir}/controlplane.yaml"
     else
         #worker node
         ln -s "${talosBaselineDir}/worker.yaml" "${newDir}/worker.yaml"
