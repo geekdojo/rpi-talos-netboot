@@ -1,15 +1,16 @@
 #! /bin/bash
 
-piSerials=("fd6f8425" "9ffe8c84" "5712c92d" "106663d7" "3a671b4e" "70408f6c" "3975a78a" "0f3b47a1" "509f8ed8" "99b56890")
+piSerials=("xxxxxxxxx" "xxxxxxxx") # replace with the serials from your PIs
+talosVersion="0.14.3" # use or replace
+talosClusterName="dk8s" # replace
+talosClusterIp="192.168.197.200" # replace
+
+# everything below can be left as is or updated to meet your needs.
 
 tftpRoot="/tftp"
 tftpBaseline="$tftpRoot/baseline"
 tftpCmdlines="$tftpRoot/cmdlines"
 tftpIp=$(hostname -I | xargs)
-
-talosVersion="0.14.3"
-talosClusterName="dk8s"
-talosClusterIp="192.168.197.200"
 apacheRoot="/var/www/html"
 talosBaselineDir="${apacheRoot}/talosBaseline"
 
